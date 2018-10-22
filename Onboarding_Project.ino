@@ -149,6 +149,13 @@ void setup() {
   while (!Serial) {
     ; // wait for serial port to connect. Needed for native USB port only
   }
+  
+  if (!bme.begin()) {  
+    Serial.println("Could not find a valid BMP280 sensor, check wiring!");
+    while (1);
+  } else {
+    Serial.println("BMP280 sensor detected.");
+  }
 
   Serial.print("Initializing SD card...");
   if (!sd.begin(SD_CS, SPI_QUARTER_SPEED)) {
@@ -156,13 +163,6 @@ void setup() {
     return;
   }
   Serial.println("initialization done.");
-
-  if (!bme.begin()) {  
-    Serial.println("Could not find a valid BMP280 sensor, check wiring!");
-    while (1);
-  } else {
-    Serial.println("BMP280 sensor detected.");
-  }
 
   Serial.println();
 
