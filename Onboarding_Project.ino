@@ -4,6 +4,7 @@
  * *Successfully transmits via RockBlock
  * *Transmits BMP and GPS data
  */
+ 
 #include <Wire.h>
 #include <SPI.h>
 #include "SdFat.h"
@@ -39,7 +40,6 @@ void writeToFile(char filename[], float writeLine, int prec) {
 
   // if the file opened okay, write to it:
   if (myFile) {
-    Serial.println(writeLine, prec);
     myFile.println(writeLine, prec);
     myFile.close();
   }
@@ -52,7 +52,6 @@ void writeToFile(char filename[], char writeLine[]) {
 
   // if the file opened okay, write to it:
   if (myFile) {
-    Serial.println(writeLine);
     myFile.println(writeLine);
     // close the file:
     myFile.close();
@@ -66,7 +65,6 @@ void writeToFile(char filename[], int writeLine) {
 
   // if the file opened okay, write to it:
   if (myFile) {
-    Serial.println(writeLine);
     myFile.println(writeLine);
     // close the file:
     myFile.close();
@@ -188,37 +186,21 @@ void loop() {
   dtostrf(gps_alt, 9, 2, buff);
   strcat(toSend, buff);
 
-//  Serial.print("data to send: ");
-//  Serial.println(toSend);
-
+  // Sending through RockBlock
   int signalQuality;
   int err = modem.getSignalQuality(signalQuality);
   if (err == ISBD_SUCCESS) {
-//    Serial.print("Signal quality: ");
-//    Serial.println(signalQuality);
-//    Serial.print("seconds: ");
-//    Serial.println(seconds);
+    // Only sends if at least 2 minutes has passed since last transmission, and signal quality is 3 and above
+    // or if at least 4 minutes has passed since last transmission and signal quality is not 0
     if ((signalQuality > 2 || (signalQuality > 0 && seconds >= 240)) && seconds >= 120) {
-//      Serial.println("Trying to send.");
       err = modem.sendSBDText(toSend);
-      if (err != ISBD_SUCCESS) {
-//        char tmp[] = "Failure to send: poor signal";
-//        writeToFile(master, tmp);
-      } else {
-//        char tmp[] = "Hey, it worked!";
-//        writeToFile(master, tmp);
+      if (err == ISBD_SUCCESS) {
         seconds = 0;
       }
-    } else {
-//      char tmp[] = "signalQuality not greater than 0; max time not yet exceeded";
-//      writeToFile(master, tmp);
     }
-  } else {
-//    char tmp[] = "Failure: can't get signal quality";
-//    writeToFile(master, tmp);  
   }
   
-  delay(19000);
+  delay(19000); // plus 1000 from smart delay = 20 seconds
   
   seconds += 20;
 }
