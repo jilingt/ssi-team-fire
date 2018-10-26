@@ -2,7 +2,7 @@
  * 
  * Updates
  * *Successfully transmits via RockBlock
- * *Transmits BMP and GPS data
+ * *Transmits BMP and GPS data in <= 50 bytes
  */
  
 #include <Wire.h>
@@ -19,8 +19,8 @@ SdFile file;
 File myFile;
 
 // GPS
-TinyGPS gps;
 #define gpsPort Serial1
+TinyGPS gps;
 
 // Iridium SBD
 #define IridiumSerial Serial3
@@ -167,23 +167,23 @@ void loop() {
 
   // Data to be sent: temp, pressure, BMP altitude, GPS latitude, GPS longitude, GPS altitude
   char buff[20] = "";
-  char toSend[85] = "";
-  dtostrf(temp, 6, 2, buff);
+  char toSend[50] = "";
+  dtostrf(temp, 5, 1, buff);
   strcat(toSend, buff);
   strcat(toSend, ",");
-  dtostrf(pres, 10, 2, buff);
+  dtostrf(pres, 6, 0, buff);
   strcat(toSend, buff);
   strcat(toSend, ",");
-  dtostrf(bmp_alt, 9, 2, buff);
+  dtostrf(bmp_alt, 6, 0, buff);
   strcat(toSend, buff);
   strcat(toSend, ",");
-  dtostrf(flat, 15, 10, buff);
+  dtostrf(flat, 10, 5, buff);
   strcat(toSend, buff);
   strcat(toSend, ",");
-  dtostrf(flon, 15, 10, buff);
+  dtostrf(flon, 10, 5, buff);
   strcat(toSend, buff);
   strcat(toSend, ",");
-  dtostrf(gps_alt, 9, 2, buff);
+  dtostrf(gps_alt, 7, 1, buff);
   strcat(toSend, buff);
 
   // Sending through RockBlock
