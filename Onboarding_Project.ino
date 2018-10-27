@@ -3,6 +3,7 @@
  * Updates
  * *Successfully transmits via RockBlock
  * *Transmits BMP and GPS data in <= 50 bytes
+ * *Connected BNO
  */
  
 #include <Wire.h>
@@ -10,6 +11,8 @@
 #include "SdFat.h"
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BMP280.h>
+#include <Adafruit_BNO055.h>
+#include <utility/imumaths.h>
 #include <TinyGPS.h>
 #include <IridiumSBD.h>
 
@@ -29,7 +32,14 @@ IridiumSBD modem(IridiumSerial);
 // BMP
 Adafruit_BMP280 bme;
 
+// BNO
+Adafruit_BNO055 bno = Adafruit_BNO055(55);
+
 const int SD_CS = 9; // Chip select for SD
+
+const int eggPin = 23;
+const int egg_alt = 20000;
+bool dropped;
 
 int seconds = 80;  // Seconds since last transmission; initialized to send 40 seconds after first initialization
 
@@ -40,6 +50,7 @@ void writeToFile(char filename[], float writeLine, int prec) {
 
   // if the file opened okay, write to it:
   if (myFile) {
+    Serial.println(writeLine);
     myFile.println(writeLine, prec);
     myFile.close();
   }
@@ -52,6 +63,7 @@ void writeToFile(char filename[], char writeLine[]) {
 
   // if the file opened okay, write to it:
   if (myFile) {
+    Serial.println(writeLine);
     myFile.println(writeLine);
     // close the file:
     myFile.close();
@@ -65,10 +77,25 @@ void writeToFile(char filename[], int writeLine) {
 
   // if the file opened okay, write to it:
   if (myFile) {
+    Serial.println(writeLine);
     myFile.println(writeLine);
     // close the file:
     myFile.close();
   }
+}
+
+bool dropEgg(float bmp_alt, bool drop, char filename[]) {
+  if(bmp_alt >= egg_alt && !drop) {
+    digitalWrite(eggPin, LOW);
+    delay(20000);
+    char tmp[] = "Egg dropped!";
+    writeToFile(filename, tmp);
+    drop = true;
+  } else {
+    digitalWrite(eggPin, HIGH);
+    drop = false;
+  }
+  return drop;
 }
 
 static void smartdelay(unsigned long ms) {
@@ -98,10 +125,14 @@ static void print_date(TinyGPS &gps, char filename[]) {
 }
 
 void setup() {
+  pinMode(eggPin, OUTPUT);
+  digitalWrite(eggPin, HIGH);
+  
   char master[] = "master.txt"; // filename
   
   // Open serial communications and wait for port to open:
   Serial.begin(115200);
+  Serial.println("test");
 
   // Initialize GPS port
   Serial1.begin(9600);
@@ -116,6 +147,11 @@ void setup() {
 
   // Initialize bmp
   bme.begin();
+
+  // Initialize bno
+  bno.begin();
+  /* Use external crystal for better accuracy */
+  bno.setExtCrystalUse(true);
 
   // Initialize RockBlock
   IridiumSerial.begin(19200);
@@ -135,10 +171,19 @@ void setup() {
     char tmp[] = "Modem initialized.";
     writeToFile(master, tmp);
   }
+
+  dropped = false;
 }
 
 void loop() {
   char master[] = "master.txt"; // Filename
+
+  // Getting data from absolute orientation sensor
+  sensors_event_t event;
+  bno.getEvent(&event);
+  float x = event.orientation.x;
+  float y = event.orientation.y;
+  float z = event.orientation.z;
   
   // Getting data from BMP
   float temp = bme.readTemperature();
@@ -162,8 +207,15 @@ void loop() {
   writeToFile(master, flon, 10);  // GPS Longitude
   writeToFile(master, gps.f_altitude(), 2); // GPS Altitude
 
+  writeToFile(master, x, 2); // x-orientation
+  writeToFile(master, y, 2); // y-orientation
+  writeToFile(master, z, 2); // z-orientation
+
   // Vital method for GPS; do not remove!
   smartdelay(1000);
+
+  // Egg drop
+  dropped = dropEgg(bmp_alt, dropped, master);
 
   // Data to be sent: temp, pressure, BMP altitude, GPS latitude, GPS longitude, GPS altitude
   char buff[20] = "";
