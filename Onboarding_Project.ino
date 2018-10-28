@@ -35,15 +35,21 @@ Adafruit_BMP280 bme;
 Adafruit_BNO055 bno = Adafruit_BNO055(55);
 
 // Thermocouple
-#define MAXDO   15
+#define MAXDO   20
 #define MAXCS   16
 #define MAXCLK  17
+// Initialize thermocouple
+Adafruit_MAX31855 thermocouple(MAXCLK, MAXCS, MAXDO);
 
 const int SD_CS = 9; // Chip select for SD
 
-const int eggPin = 23;
-const int egg_alt = 2250;
-bool dropped;
+const int eggPin = 22;  // Egg cutdown
+const int egg_alt = 2250; // Altitude at which egg cutsdown
+bool eggDropped; // true if egg has dropped
+
+const int mainPin = 23; // Main pin cutdown
+const int main_alt = 25000; // Altitude at which main cutsdown
+bool mainDropped; // true if main has dropped
 
 int seconds = 80;  // Seconds since last transmission; initialized to send 40 seconds after first initialization
 
@@ -103,13 +109,27 @@ void writeToFile(char filename[], int writeLine) {
 
 bool dropEgg(float bmp_alt, bool drop, char filename[]) {
   if(bmp_alt >= egg_alt && !drop) {
-    digitalWrite(eggPin, LOW);
+    digitalWrite(eggPin, HIGH);
     delay(20000);
     char tmp[] = "Egg dropped!";
     writeToFile(filename, tmp);
     drop = true;
   } else {
-    digitalWrite(eggPin, HIGH);
+    digitalWrite(eggPin, LOW);
+    drop = false;
+  }
+  return drop;
+}
+
+bool dropMain(float bmp_alt, bool drop, char filename[]) {
+  if(bmp_alt >= main_alt && !drop) {
+    digitalWrite(mainPin, HIGH);
+    delay(20000);
+    char tmp[] = "Main dropped!";
+    writeToFile(filename, tmp);
+    drop = true;
+  } else {
+    digitalWrite(mainPin, LOW);
     drop = false;
   }
   return drop;
@@ -143,7 +163,9 @@ static void print_date(TinyGPS &gps, char filename[]) {
 
 void setup() {
   pinMode(eggPin, OUTPUT);
-  digitalWrite(eggPin, HIGH);
+  digitalWrite(eggPin, LOW);
+  pinMode(mainPin, OUTPUT);
+  digitalWrite(mainPin, LOW);
   
   char master[] = "master.txt"; // filename
   
@@ -168,9 +190,6 @@ void setup() {
   bno.begin();
   /* Use external crystal for better accuracy */
   bno.setExtCrystalUse(true);
-
-  // Initialize thermocouple
-  Adafruit_MAX31855 thermocouple(MAXCLK, MAXCS, MAXDO);
   
   // Initialize RockBlock
   IridiumSerial.begin(19200);
@@ -191,7 +210,8 @@ void setup() {
     writeToFile(master, tmp);
   }
 
-  dropped = false;
+  eggDropped = false;
+  mainDropped = false;
 }
 
 void loop() {
@@ -209,7 +229,7 @@ void loop() {
   double tc_temp = thermocouple.readCelsius();
   
   // Getting data from BMP
-  float bme_temp = bme.readTemperature();
+  float bmp_temp = bme.readTemperature();
   float pres = bme.readPressure();
   float bmp_alt = bme.readAltitude();
 
@@ -222,7 +242,7 @@ void loop() {
   writeToFile(master, tmp);
   print_date(gps, master);
 
-  writeToFile(master, bme_temp, 2); // BMP Temperature
+  writeToFile(master, bmp_temp, 2); // BMP Temperature
   writeToFile(master, pres, 2);  // Pressure
   writeToFile(master, bmp_alt, 2); // BMP Altitude (approximated)
   
@@ -241,12 +261,15 @@ void loop() {
   smartdelay(1000);
 
   // Egg drop
-  dropped = dropEgg(bmp_alt, dropped, master);
+  eggDropped = dropEgg(bmp_alt, eggDropped, master);
 
   // Data to be sent: temp, pressure, BMP altitude, GPS latitude, GPS longitude, GPS altitude
   char buff[20] = "";
-  char toSend[50] = "";
+  char toSend[56] = "";
   dtostrf(bmp_temp, 5, 1, buff);
+  strcat(toSend, buff);
+  strcat(toSend, ",");
+  dtostrf(tc_temp, 5, 1, buff);
   strcat(toSend, buff);
   strcat(toSend, ",");
   dtostrf(pres, 6, 0, buff);
@@ -279,6 +302,9 @@ void loop() {
   }
   
   delay(19000); // plus 1000 from smart delay = 20 seconds
+
+  // Drop main
+  mainDropped = dropMain(bmp_alt, mainDropped, master);
   
   seconds += 20;
 }
