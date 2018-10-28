@@ -1,20 +1,19 @@
 /* Onboarding Project - Team Fire
  * 
  * Updates
- * *Successfully transmits via RockBlock
- * *Transmits BMP and GPS data in <= 50 bytes
- * *Connected BNO
+ * *Integrated thermocouple
  */
  
 #include <Wire.h>
 #include <SPI.h>
-#include "SdFat.h"
+#include <SdFat.h>
+#include <TinyGPS.h>
+#include <IridiumSBD.h>
 #include <Adafruit_Sensor.h>
+#include <Adafruit_MAX31855.h>
 #include <Adafruit_BMP280.h>
 #include <Adafruit_BNO055.h>
 #include <utility/imumaths.h>
-#include <TinyGPS.h>
-#include <IridiumSBD.h>
 
 // SD Card
 SdFat sd;
@@ -35,10 +34,15 @@ Adafruit_BMP280 bme;
 // BNO
 Adafruit_BNO055 bno = Adafruit_BNO055(55);
 
+// Thermocouple
+#define MAXDO   15
+#define MAXCS   16
+#define MAXCLK  17
+
 const int SD_CS = 9; // Chip select for SD
 
 const int eggPin = 23;
-const int egg_alt = 20000;
+const int egg_alt = 2250;
 bool dropped;
 
 int seconds = 80;  // Seconds since last transmission; initialized to send 40 seconds after first initialization
@@ -52,6 +56,19 @@ void writeToFile(char filename[], float writeLine, int prec) {
   if (myFile) {
     Serial.println(writeLine);
     myFile.println(writeLine, prec);
+    myFile.close();
+  }
+}
+
+void writeToFile(char filename[], double writeLine) {
+  // open the file. note that only one file can be open at a time,
+  // so you have to close this one before opening another.
+  myFile = sd.open(filename, FILE_WRITE);
+
+  // if the file opened okay, write to it:
+  if (myFile) {
+    Serial.println(writeLine);
+    myFile.println(writeLine);
     myFile.close();
   }
 }
@@ -132,7 +149,6 @@ void setup() {
   
   // Open serial communications and wait for port to open:
   Serial.begin(115200);
-  Serial.println("test");
 
   // Initialize GPS port
   Serial1.begin(9600);
@@ -153,6 +169,9 @@ void setup() {
   /* Use external crystal for better accuracy */
   bno.setExtCrystalUse(true);
 
+  // Initialize thermocouple
+  Adafruit_MAX31855 thermocouple(MAXCLK, MAXCS, MAXDO);
+  
   // Initialize RockBlock
   IridiumSerial.begin(19200);
 
@@ -184,9 +203,13 @@ void loop() {
   float x = event.orientation.x;
   float y = event.orientation.y;
   float z = event.orientation.z;
+
+  // Getting data from thermocouple
+  double int_temp = thermocouple.readInternal();
+  double tc_temp = thermocouple.readCelsius();
   
   // Getting data from BMP
-  float temp = bme.readTemperature();
+  float bme_temp = bme.readTemperature();
   float pres = bme.readPressure();
   float bmp_alt = bme.readAltitude();
 
@@ -199,7 +222,7 @@ void loop() {
   writeToFile(master, tmp);
   print_date(gps, master);
 
-  writeToFile(master, temp, 2); // Temperature
+  writeToFile(master, bme_temp, 2); // BMP Temperature
   writeToFile(master, pres, 2);  // Pressure
   writeToFile(master, bmp_alt, 2); // BMP Altitude (approximated)
   
@@ -211,6 +234,9 @@ void loop() {
   writeToFile(master, y, 2); // y-orientation
   writeToFile(master, z, 2); // z-orientation
 
+  writeToFile(master, int_temp); // Thermocouple int temp
+  writeToFile(master, tc_temp); // Thermocouple temp
+
   // Vital method for GPS; do not remove!
   smartdelay(1000);
 
@@ -220,7 +246,7 @@ void loop() {
   // Data to be sent: temp, pressure, BMP altitude, GPS latitude, GPS longitude, GPS altitude
   char buff[20] = "";
   char toSend[50] = "";
-  dtostrf(temp, 5, 1, buff);
+  dtostrf(bmp_temp, 5, 1, buff);
   strcat(toSend, buff);
   strcat(toSend, ",");
   dtostrf(pres, 6, 0, buff);
