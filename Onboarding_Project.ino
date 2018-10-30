@@ -1,7 +1,9 @@
 /* Onboarding Project - Team Fire
  * 
  * Updates
- * *Integrated thermocouple
+ * *CSV Format
+ * *Log file
+ * *Cleaned
  */
  
 #include <Wire.h>
@@ -48,61 +50,99 @@ const int egg_alt = 2250; // Altitude at which egg cutsdown
 bool eggDropped; // true if egg has dropped
 
 const int mainPin = 23; // Main pin cutdown
-const int main_alt = 25000; // Altitude at which main cutsdown
+const int main_alt = 22000; // Altitude at which main cutsdown
 bool mainDropped; // true if main has dropped
 
 int seconds = 80;  // Seconds since last transmission; initialized to send 40 seconds after first initialization
 
 void writeToFile(char filename[], float writeLine, int prec) {
-  // open the file. note that only one file can be open at a time,
-  // so you have to close this one before opening another.
+  // open the file
   myFile = sd.open(filename, FILE_WRITE);
 
   // if the file opened okay, write to it:
   if (myFile) {
-    Serial.println(writeLine);
     myFile.println(writeLine, prec);
     myFile.close();
   }
 }
 
-void writeToFile(char filename[], double writeLine) {
-  // open the file. note that only one file can be open at a time,
-  // so you have to close this one before opening another.
+void writeToFileNoLine(char filename[], float writeLine, int prec) {
+  // open the file
   myFile = sd.open(filename, FILE_WRITE);
 
   // if the file opened okay, write to it:
   if (myFile) {
-    Serial.println(writeLine);
+    myFile.print(writeLine, prec);
+    myFile.print(",");
+    myFile.close();
+  }
+}
+
+void writeToFile(char filename[], double writeLine) {
+  // open the file
+  myFile = sd.open(filename, FILE_WRITE);
+
+  // if the file opened okay, write to it:
+  if (myFile) {
     myFile.println(writeLine);
+    myFile.close();
+  }
+}
+
+void writeToFileNoLine(char filename[], double writeLine) {
+  // open the file
+  myFile = sd.open(filename, FILE_WRITE);
+
+  // if the file opened okay, write to it:
+  if (myFile) {
+    myFile.print(writeLine);
+    myFile.print(",");
     myFile.close();
   }
 }
 
 void writeToFile(char filename[], char writeLine[]) {
-  // open the file. note that only one file can be open at a time,
-  // so you have to close this one before opening another.
+  // open the file
   myFile = sd.open(filename, FILE_WRITE);
 
   // if the file opened okay, write to it:
   if (myFile) {
-    Serial.println(writeLine);
     myFile.println(writeLine);
-    // close the file:
+    myFile.close();
+  }
+}
+
+void writeToFileNoLine(char filename[], char writeLine[]) {
+  // open the file
+  myFile = sd.open(filename, FILE_WRITE);
+
+  // if the file opened okay, write to it:
+  if (myFile) {
+    myFile.print(writeLine);
+    myFile.print(",");
     myFile.close();
   }
 }
 
 void writeToFile(char filename[], int writeLine) {
-  // open the file. note that only one file can be open at a time,
-  // so you have to close this one before opening another.
+  // open the file
   myFile = sd.open(filename, FILE_WRITE);
 
   // if the file opened okay, write to it:
   if (myFile) {
-    Serial.println(writeLine);
     myFile.println(writeLine);
-    // close the file:
+    myFile.close();
+  }
+}
+
+void writeToFileNoLine(char filename[], int writeLine) {
+  // open the file
+  myFile = sd.open(filename, FILE_WRITE);
+
+  // if the file opened okay, write to it:
+  if (myFile) {
+    myFile.print(writeLine);
+    myFile.print(",");
     myFile.close();
   }
 }
@@ -110,7 +150,7 @@ void writeToFile(char filename[], int writeLine) {
 bool dropEgg(float bmp_alt, bool drop, char filename[]) {
   if(bmp_alt >= egg_alt && !drop) {
     digitalWrite(eggPin, HIGH);
-    delay(20000);
+    delay(70000);
     char tmp[] = "Egg dropped!";
     writeToFile(filename, tmp);
     drop = true;
@@ -124,7 +164,7 @@ bool dropEgg(float bmp_alt, bool drop, char filename[]) {
 bool dropMain(float bmp_alt, bool drop, char filename[]) {
   if(bmp_alt >= main_alt && !drop) {
     digitalWrite(mainPin, HIGH);
-    delay(20000);
+    delay(70000);
     char tmp[] = "Main dropped!";
     writeToFile(filename, tmp);
     drop = true;
@@ -151,12 +191,12 @@ static void print_date(TinyGPS &gps, char filename[]) {
   gps.crack_datetime(&year, &month, &day, &hour, &minute, &second, &hundredths, &age);
   if (age == TinyGPS::GPS_INVALID_AGE) {
     char tmp[] = "GPS NO SIGNAL";
-    writeToFile(filename, tmp);
+    writeToFileNoLine(filename, tmp);
   } else {
     char sz[32] = "";
     sprintf(sz, "%02d/%02d/%02d %02d:%02d:%02d ",
         month, day, year, (hour-7), minute, second);
-    writeToFile(filename, sz);
+    writeToFileNoLine(filename, sz);
   }
   smartdelay(0);
 }
@@ -167,10 +207,8 @@ void setup() {
   pinMode(mainPin, OUTPUT);
   digitalWrite(mainPin, LOW);
   
-  char master[] = "master.txt"; // filename
-  
-  // Open serial communications and wait for port to open:
-  Serial.begin(115200);
+  char master[] = "data.csv"; // filename
+  char logger[] = "log.txt";
 
   // Initialize GPS port
   Serial1.begin(9600);
@@ -198,24 +236,28 @@ void setup() {
   int err;
   err = modem.begin();
   if (err != ISBD_SUCCESS) {
-    char tmp[] = "Begin failed: error";
-    writeToFile(master, tmp);
-    writeToFile(master, err);
+    char tmp[] = "Begin failed: error ";
+    writeToFileNoLine(logger, tmp);
+    writeToFile(logger, err);
     if (err == ISBD_NO_MODEM_DETECTED) {
       strcpy(tmp, "No modem detected: check wiring.");
-      writeToFile(master, tmp);
+      writeToFile(logger, tmp);
     }
   } else {
     char tmp[] = "Modem initialized.";
-    writeToFile(master, tmp);
+    writeToFile(logger, tmp);
   }
 
   eggDropped = false;
   mainDropped = false;
+
+  char varNames[] = "timestamp,bmp_temp,pres,bmp_alt,flat,flon,altitude,x,y,z,int_temp,tc_temp";
+  writeToFile(master, varNames);
 }
 
 void loop() {
-  char master[] = "master.txt"; // Filename
+  char master[] = "data.csv"; // Filename
+  char logger[] = "log.txt";
 
   // Getting data from absolute orientation sensor
   sensors_event_t event;
@@ -238,23 +280,24 @@ void loop() {
   unsigned long age = 0;
   gps.f_get_position(&flat, &flon, &age);
   float gps_alt = gps.f_altitude();
-  char tmp[] = "****";
-  writeToFile(master, tmp);
+  char stars[] = "****";
+  writeToFile(logger, stars);
   print_date(gps, master);
+  print_date(gps, logger);
 
-  writeToFile(master, bmp_temp, 2); // BMP Temperature
-  writeToFile(master, pres, 2);  // Pressure
-  writeToFile(master, bmp_alt, 2); // BMP Altitude (approximated)
+  writeToFileNoLine(master, bmp_temp, 2); // BMP Temperature
+  writeToFileNoLine(master, pres, 2);  // Pressure
+  writeToFileNoLine(master, bmp_alt, 2); // BMP Altitude (approximated)
   
-  writeToFile(master, flat, 10);  // GPS Latitude
-  writeToFile(master, flon, 10);  // GPS Longitude
-  writeToFile(master, gps.f_altitude(), 2); // GPS Altitude
+  writeToFileNoLine(master, flat, 10);  // GPS Latitude
+  writeToFileNoLine(master, flon, 10);  // GPS Longitude
+  writeToFileNoLine(master, gps.f_altitude(), 2); // GPS Altitude
 
-  writeToFile(master, x, 2); // x-orientation
-  writeToFile(master, y, 2); // y-orientation
-  writeToFile(master, z, 2); // z-orientation
+  writeToFileNoLine(master, x, 2); // x-orientation
+  writeToFileNoLine(master, y, 2); // y-orientation
+  writeToFileNoLine(master, z, 2); // z-orientation
 
-  writeToFile(master, int_temp); // Thermocouple int temp
+  writeToFileNoLine(master, int_temp); // Thermocouple int temp
   writeToFile(master, tc_temp); // Thermocouple temp
 
   // Vital method for GPS; do not remove!
@@ -265,7 +308,7 @@ void loop() {
 
   // Data to be sent: temp, pressure, BMP altitude, GPS latitude, GPS longitude, GPS altitude
   char buff[20] = "";
-  char toSend[56] = "";
+  char toSend[60] = "";
   dtostrf(bmp_temp, 5, 1, buff);
   strcat(toSend, buff);
   strcat(toSend, ",");
@@ -294,10 +337,29 @@ void loop() {
     // Only sends if at least 2 minutes has passed since last transmission, and signal quality is 3 and above
     // or if at least 4 minutes has passed since last transmission and signal quality is not 0
     if ((signalQuality > 2 || (signalQuality > 0 && seconds >= 240)) && seconds >= 120) {
+      char tmp[] = "Signal quality is currently: ";
+      writeToFileNoLine(logger, tmp);
+      writeToFile(logger, signalQuality);
+      strcpy(tmp, "Time since last transmission is currently: ");
+      writeToFileNoLine(logger, tmp);
+      writeToFile(logger, seconds);
+      strcpy(tmp, "Trying to send.");
+      writeToFile(logger, tmp);
       err = modem.sendSBDText(toSend);
       if (err == ISBD_SUCCESS) {
+        strcpy(tmp, "Hey, it worked!");
+        writeToFile(logger, tmp);
         seconds = 0;
       }
+    } else {
+      char tmp[] = "Signal quality is currently: ";
+      writeToFileNoLine(logger, tmp);
+      writeToFile(logger, signalQuality);
+      strcpy(tmp, "Time since last transmission is currently: ");
+      writeToFileNoLine(logger, tmp);
+      writeToFile(logger, seconds);
+      strcpy(tmp, "Not trying to send.");
+      writeToFile(logger, tmp);
     }
   }
   
